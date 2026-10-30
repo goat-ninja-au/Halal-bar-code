@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cut">
+  <title>Halal Scanner</title>
+  <meta name="description" content="Scan a food barcode to check if it's halal.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icon.svg" alt="" width="32" height="32">
+    <h1>Halal Scanner</h1>
+  </header>
+
+  <main>
+    <section class="card scan">
+      <div id="reader" hidden></div>
+      <button id="scanBtn" class="btn primary">📷 Scan barcode</button>
+      <form id="manualForm" class="manual">
+        <input id="manualInput" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="…or type the barcode number" autocomplete="off">
+        <button class="btn" type="submit">Check</button>
+      </form>
+      <p id="scanMsg" class="muted small"></p>
+    </section>
+
+    <section id="result" class="card result" hidden></section>
+
+    <section id="historyWrap" class="card" hidden>
+      <div class="row">
+        <h2>Recent scans</h2>
+        <button id="clearHistory" class="link">Clear</button>
+      </div>
+      <ul id="history" class="history"></ul>
+    </section>
+
+    <p class="disclaimer">
+      Guidance only — always look for a trusted halal certification logo. Product data comes from
+      <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>
+      and may be incomplete or wrong.
+    </p>
+  </main>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="halal.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "Halal Scanner",
+  "short_name": "Halal Scan",
+  "description": "Scan a food barcode to check if it's halal.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0f766e",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
