@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header class="top">
@@ -26,11 +26,16 @@
         <button class="btn" type="submit">Check</button>
       </form>
       <form id="searchForm" class="manual search">
-        <input id="searchInput" type="search" placeholder="🔍 Search by name, e.g. Arnott's Tim Tam" autocomplete="off" enterkeyhint="search">
+        <input id="searchInput" type="search" placeholder="🔍 Search a food or fast food place (e.g. Tim Tam, KFC)" autocomplete="off" enterkeyhint="search">
         <button class="btn" type="submit">Search</button>
       </form>
       <p id="scanMsg" class="muted small"></p>
       <button id="ingredientsBtn" class="link small" type="button">No barcode? Check from a photo of the ingredients →</button>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">🍔 Fast food — is it halal?</h2>
+      <div id="chainChips" class="chips"></div>
     </section>
 
     <section id="result" class="card result" hidden></section>
@@ -53,7 +58,8 @@
   </main>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="halal.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="halal.js?v=8"></script>
+  <script src="restaurants.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

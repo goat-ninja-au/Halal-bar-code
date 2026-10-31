@@ -124,6 +124,17 @@ mark.note { background: transparent; text-decoration: underline dotted; }
 .r-verdict.v-haram small { color: var(--haram); }
 .r-verdict.v-unknown small { color: var(--unknown); }
 
+/* Fast food */
+.section-title { font-size: 1rem; margin: 0 0 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-size: .9rem; padding: 8px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.chain-logo { width: 64px; height: 64px; display: grid; place-items: center; font-size: 2rem; border-radius: 8px; background: var(--bg); }
+ul.plain { padding-left: 20px; margin: 0; }
+ul.plain li { margin-bottom: 4px; }
+
 /* History */
 .row { display: flex; justify-content: space-between; align-items: center; }
 .row h2 { font-size: 1rem; margin: 0; }

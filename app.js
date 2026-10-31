@@ -375,6 +375,12 @@
     if (q.length < 2) return;
     searchInput.blur();
     await stopScan();
+    const chain = window.Restaurants && Restaurants.find(q);
+    if (chain && !e.submitter?.dataset.products) return showChain(chain);
+    searchProducts(q);
+  });
+
+  async function searchProducts(q) {
     resultEl.hidden = true;
     searchResults.hidden = false;
     searchResults.innerHTML = `<p class="muted">Searching for <b>${esc(q)}</b>…</p>`;
@@ -391,7 +397,46 @@
     } catch {
       searchResults.innerHTML = `<p>Search is busy right now — try again in a moment.</p>`;
     }
-  });
+  }
+
+  // ---------- Fast food chains ----------
+  function showChain(c) {
+    const st = Restaurants.STATUS[c.status];
+    const li = (arr) => arr.map((t) => `<li>${esc(t)}</li>`).join("");
+    const stores = c.stores ? Object.entries(c.stores).map(([state, list]) =>
+      `<p class="small"><b>${esc(state)}:</b> ${list.map(esc).join(", ")}</p>`).join("") : "";
+    searchResults.hidden = true;
+    resultEl.hidden = false;
+    resultEl.className = `card result v-${st.cls}`;
+    resultEl.innerHTML = `
+      <div class="product"><span class="chain-logo">🍔</span>
+        <div><h2>${esc(c.name)}</h2><p class="muted small">Fast food · Australia</p></div>
+      </div>
+      <div class="verdict">
+        <span class="icon">${st.icon}</span>
+        <div><strong>${esc(st.label)}</strong><p>${esc(c.summary)}</p></div>
+      </div>
+      ${c.points.length ? `<h3>What we know</h3><ul class="plain">${li(c.points)}</ul>` : ""}
+      ${stores ? `<h3>Halal stores</h3>${stores}` : ""}
+      ${c.cautions.length ? `<h3>Be aware</h3><ul class="flags">${c.cautions.map((t) => `<li class="doubtful">${esc(t)}</li>`).join("")}</ul>` : ""}
+      <h3>Sources</h3>
+      ${c.sources.length
+        ? `<ul class="plain small">${c.sources.map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join("")}</ul>`
+        : `<p class="small muted">No official halal statement found.</p>`}
+      <p class="small muted">Last checked ${esc(Restaurants.CHECKED)}. Halal status can change — when in doubt, ask the store to show its current halal certificate.</p>
+    `;
+    resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const chips = $("chainChips");
+  if (chips && window.Restaurants) {
+    chips.innerHTML = Restaurants.CHAINS.map((c) =>
+      `<button type="button" class="chip" data-chain="${c.id}">${Restaurants.STATUS[c.status].icon} ${esc(c.name)}</button>`).join("");
+    chips.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-chain]");
+      if (b) showChain(Restaurants.CHAINS.find((c) => c.id === b.dataset.chain));
+    });
+  }
 
   function renderSearch(q, products) {
     const head = `<div class="row"><h2>Results for “${esc(q)}”</h2><button class="link" type="button" data-close>Close</button></div>`;
