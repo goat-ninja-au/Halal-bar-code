@@ -101,6 +101,29 @@ mark.note { background: transparent; text-decoration: underline dotted; }
 .from-photo { margin: 10px 0 0; }
 #ingredientsBtn { display: block; margin: 4px auto 0; color: var(--brand); text-decoration: underline; }
 
+/* Search */
+.search { margin-top: 8px; }
+.search input[type="search"] { -webkit-appearance: none; }
+.results { list-style: none; padding: 0; margin: 10px 0 6px; }
+.results button {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+  font: inherit; color: var(--text); background: none; border: none;
+  border-top: 1px solid var(--border); padding: 10px 0; cursor: pointer;
+}
+.results img, .noimg {
+  width: 48px; height: 48px; flex: none; object-fit: contain;
+  border-radius: 8px; background: #fff; display: grid; place-items: center; font-size: 1.4rem;
+}
+.r-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.r-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-verdict { flex: none; display: flex; flex-direction: column; align-items: center; font-size: 1.3rem; line-height: 1.1; }
+.r-verdict small { font-size: .7rem; font-weight: 600; margin-top: 2px; }
+.r-verdict.v-halal small { color: var(--halal); }
+.r-verdict.v-clear small { color: var(--clear); }
+.r-verdict.v-doubtful small { color: var(--doubt); }
+.r-verdict.v-haram small { color: var(--haram); }
+.r-verdict.v-unknown small { color: var(--unknown); }
+
 /* History */
 .row { display: flex; justify-content: space-between; align-items: center; }
 .row h2 { font-size: 1rem; margin: 0; }

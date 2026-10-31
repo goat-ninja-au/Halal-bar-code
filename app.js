@@ -363,6 +363,71 @@
       <p class="small"><a href="https://world.openfoodfacts.org/contribute" target="_blank" rel="noopener">Add it to Open Food Facts so it scans next time →</a></p>`;
   }
 
+  // ---------- Search by name ----------
+  const searchForm = $("searchForm"), searchInput = $("searchInput"), searchResults = $("searchResults");
+  const VERDICT_WORD = { halal: "Certified", clear: "OK", doubtful: "Doubtful", haram: "Haram", unknown: "No info" };
+  const isAU = (p) => ((p.countries_tags || []).includes("en:australia") ? 1 : 0);
+  let lastResults = [];
+
+  searchForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = searchInput.value.trim();
+    if (q.length < 2) return;
+    searchInput.blur();
+    await stopScan();
+    resultEl.hidden = true;
+    searchResults.hidden = false;
+    searchResults.innerHTML = `<p class="muted">Searching for <b>${esc(q)}</b>…</p>`;
+    searchResults.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      const data = await fetchJSON(
+        `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}` +
+        `&search_simple=1&action=process&json=1&page_size=24&fields=${FIELDS},countries_tags`
+      );
+      const products = (data.products || []).filter((p) => p.code && (p.product_name || p.product_name_en));
+      products.sort((a, b) => isAU(b) - isAU(a)); // Australian products first
+      lastResults = products;
+      renderSearch(q, products);
+    } catch {
+      searchResults.innerHTML = `<p>Search is busy right now — try again in a moment.</p>`;
+    }
+  });
+
+  function renderSearch(q, products) {
+    const head = `<div class="row"><h2>Results for “${esc(q)}”</h2><button class="link" type="button" data-close>Close</button></div>`;
+    if (!products.length) {
+      searchResults.innerHTML = `${head}
+        <p class="muted small">Nothing found. Try the brand plus the product name (e.g. “Arnott's Tim Tam”), or scan the barcode / photograph the ingredients instead.</p>`;
+      return;
+    }
+    searchResults.innerHTML = `${head}
+      <ul class="results">${products.map((p, i) => {
+        const r = HalalCheck.check(p);
+        const name = p.product_name_en || p.product_name;
+        const brand = (p.brands || "").split(",")[0];
+        return `<li><button type="button" data-i="${i}">
+          ${p.image_front_small_url ? `<img src="${esc(p.image_front_small_url)}" alt="" loading="lazy">` : `<span class="noimg">🛒</span>`}
+          <span class="r-text"><b>${esc(name)}</b><span class="muted small">${esc(brand)}${isAU(p) ? " · 🇦🇺" : ""}</span></span>
+          <span class="r-verdict v-${r.verdict}">${ICONS[r.verdict]}<small>${VERDICT_WORD[r.verdict]}</small></span>
+        </button></li>`;
+      }).join("")}</ul>
+      <p class="muted small">Tap a product for the full breakdown.</p>`;
+  }
+
+  searchResults.addEventListener("click", (e) => {
+    if (e.target.closest("[data-close]")) { searchResults.hidden = true; return; }
+    const btn = e.target.closest("button[data-i]");
+    if (!btn) return;
+    const p = lastResults[+btn.dataset.i];
+    current = p;
+    resultEl.hidden = false;
+    const saved = loadLabels()[p.code];
+    const r = HalalCheck.check(p);
+    if (r.verdict === "unknown" && saved) return checkText(saved.text, true);
+    render(p, r);
+    saveHistory(p, r);
+  });
+
   // ---------- History (kept on this device only) ----------
   const KEY = "halal-history";
   const loadHistory = () => {
