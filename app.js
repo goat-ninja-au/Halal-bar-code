@@ -375,8 +375,8 @@
     if (q.length < 2) return;
     searchInput.blur();
     await stopScan();
-    const chain = window.Restaurants && Restaurants.find(q);
-    if (chain && !e.submitter?.dataset.products) return showChain(chain);
+    const hit = window.Restaurants && Restaurants.parse(q);
+    if (hit) return hit.place ? showStore(hit.chain, { place: hit.place }) : showChain(hit.chain);
     searchProducts(q);
   });
 
@@ -412,6 +412,8 @@
       <div class="product"><span class="chain-logo">🍔</span>
         <div><h2>${esc(c.name)}</h2><p class="muted small">Fast food · Australia</p></div>
       </div>
+      ${storeFinderHTML(c)}
+      <h3>${esc(c.name)} in general</h3>
       <div class="verdict">
         <span class="icon">${st.icon}</span>
         <div><strong>${esc(st.label)}</strong><p>${esc(c.summary)}</p></div>
@@ -427,6 +429,135 @@
     `;
     resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  // ---------- Specific stores ----------
+  // OpenStreetMap's Nominatim: free, but max 1 request per second.
+  const NOMINATIM = "https://nominatim.openstreetmap.org";
+  let lastCall = 0;
+  const geoCache = new Map();
+  async function nominatim(path) {
+    if (geoCache.has(path)) return geoCache.get(path);
+    const wait = lastCall + 1100 - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCall = Date.now();
+    const data = await fetchJSON(`${NOMINATIM}${path}${path.includes("?") ? "&" : "?"}format=jsonv2&addressdetails=1&countrycodes=au`, 2);
+    geoCache.set(path, data);
+    return data;
+  }
+  const placeName = (a = {}) => a.suburb || a.town || a.city_district || a.village || a.city || a.municipality || "";
+  const km = (la1, lo1, la2, lo2) => {
+    const R = 6371, r = Math.PI / 180;
+    const a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  function storeFinderHTML(c) {
+    return `
+      <div class="store-finder">
+        <p class="small"><b>Check a specific store</b></p>
+        <form class="manual" data-store-form="${c.id}">
+          <input name="place" placeholder="Suburb, e.g. Punchbowl" autocomplete="off" enterkeyhint="search">
+          <button class="btn" type="submit">Check</button>
+        </form>
+        <button class="btn near" type="button" data-near="${c.id}">📍 ${esc(c.name)} near me</button>
+      </div>`;
+  }
+
+  async function showStore(c, { place, lat, lon }) {
+    searchResults.hidden = true;
+    resultEl.hidden = false;
+    resultEl.className = "card result";
+    resultEl.innerHTML = `<p class="muted">Finding ${esc(c.name)} ${place ? "in " + esc(place) : "near you"}…</p>`;
+    resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      let area;
+      if (place) {
+        const g = await nominatim(`/search?limit=1&q=${encodeURIComponent(place)}`);
+        if (!g.length) {
+          resultEl.innerHTML = `<p>Couldn't find a place called “${esc(place)}” in Australia. Check the spelling of the suburb.</p>${storeFinderHTML(c)}`;
+          return;
+        }
+        area = { lat: +g[0].lat, lon: +g[0].lon, suburb: placeName(g[0].address) || g[0].name, state: g[0].address?.state };
+      } else {
+        const g = await nominatim(`/reverse?lat=${lat}&lon=${lon}&zoom=14`);
+        area = { lat, lon, suburb: placeName(g.address), state: g.address?.state };
+      }
+
+      const d = 0.05; // ~5 km box around the suburb
+      const box = [area.lon - d, area.lat + d, area.lon + d, area.lat - d].join(",");
+      const hits = await nominatim(`/search?limit=12&bounded=1&viewbox=${box}&q=${encodeURIComponent(Restaurants.osmName(c))}`);
+      const seen = new Set();
+      const stores = hits
+        .filter((h) => h.category === "amenity" || h.type === "fast_food" || h.type === "restaurant")
+        .map((h) => ({
+          road: h.address?.road || "", suburb: placeName(h.address), state: h.address?.state || area.state,
+          dist: km(area.lat, area.lon, +h.lat, +h.lon),
+          map: `https://www.openstreetmap.org/${h.osm_type}/${h.osm_id}`,
+        }))
+        .filter((st) => { const k = st.road + st.suburb; if (seen.has(k)) return false; seen.add(k); return true; })
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 8);
+
+      // Verdict for the suburb they asked about (or the closest store for "near me")
+      const focus = place ? area : (stores[0] || area);
+      const v = Restaurants.storeStatus(c, focus.suburb, focus.state);
+      const st = Restaurants.STATUS[v.status];
+      const where = [focus.suburb, focus.state].filter(Boolean).join(", ");
+
+      resultEl.className = `card result v-${st.cls}`;
+      resultEl.innerHTML = `
+        <div class="product"><span class="chain-logo">🍔</span>
+          <div><h2>${esc(c.name)} ${esc(focus.suburb || "")}</h2><p class="muted small">${esc(where)}</p></div>
+        </div>
+        <div class="verdict">
+          <span class="icon">${st.icon}</span>
+          <div><strong>${esc(v.title)}</strong><p>${esc(v.note)}</p></div>
+        </div>
+        ${stores.length ? `
+          <h3>${esc(c.name)} stores ${place ? "around " + esc(area.suburb) : "near you"}</h3>
+          <ul class="stores">${stores.map((s) => {
+            const sv = Restaurants.storeStatus(c, s.suburb, s.state);
+            const ss = Restaurants.STATUS[sv.status];
+            return `<li>
+              <span class="s-icon">${ss.icon}</span>
+              <span class="s-text"><b>${esc(s.suburb || "Unknown suburb")}</b>
+                <span class="muted small">${esc(s.road)}${s.road ? " · " : ""}${s.dist.toFixed(1)} km · <a href="${esc(s.map)}" target="_blank" rel="noopener">map</a></span>
+                <span class="small s-${ss.cls}">${esc(sv.title)}</span></span>
+            </li>`;
+          }).join("")}</ul>` : `<p class="small muted">We couldn't find ${esc(c.name)} stores on the map around here — the verdict above is based on the suburb.</p>`}
+        <p class="small muted">Store locations from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Halal status can change — ask the store to show its current halal certificate.</p>
+        <button class="btn" type="button" data-chain-info="${c.id}">About ${esc(c.name)} &amp; sources →</button>
+        ${storeFinderHTML(c)}
+      `;
+    } catch {
+      resultEl.innerHTML = `<p>The map service is busy — try again in a moment.</p>${storeFinderHTML(c)}`;
+    }
+  }
+
+  function nearMe(c) {
+    if (!navigator.geolocation) return showChain(c);
+    resultEl.innerHTML = `<p class="muted">Getting your location…</p>`;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => showStore(c, { lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => { resultEl.innerHTML = `<p>Location is off — type a suburb instead.</p>${storeFinderHTML(c)}`; },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
+  }
+
+  resultEl.addEventListener("submit", (e) => {
+    const f = e.target.closest("[data-store-form]");
+    if (!f) return;
+    e.preventDefault();
+    const place = f.place.value.trim();
+    const c = Restaurants.CHAINS.find((x) => x.id === f.dataset.storeForm);
+    if (place) showStore(c, { place });
+  });
+  resultEl.addEventListener("click", (e) => {
+    const n = e.target.closest("[data-near]");
+    if (n) nearMe(Restaurants.CHAINS.find((x) => x.id === n.dataset.near));
+    const i = e.target.closest("[data-chain-info]");
+    if (i) showChain(Restaurants.CHAINS.find((x) => x.id === i.dataset.chainInfo));
+  });
 
   const chips = $("chainChips");
   if (chips && window.Restaurants) {

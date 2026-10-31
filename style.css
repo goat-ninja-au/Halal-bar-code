@@ -135,6 +135,18 @@ mark.note { background: transparent; text-decoration: underline dotted; }
 ul.plain { padding-left: 20px; margin: 0; }
 ul.plain li { margin-bottom: 4px; }
 
+.store-finder { margin: 14px 0 4px; padding: 12px; border-radius: 12px; background: var(--bg); }
+.store-finder p { margin: 0 0 6px; }
+.store-finder .manual { margin-top: 0; }
+.btn.near { width: 100%; margin-top: 8px; }
+.stores { list-style: none; padding: 0; margin: 0; }
+.stores li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.s-icon { font-size: 1.3rem; line-height: 1.2; }
+.s-text { display: flex; flex-direction: column; }
+.s-halal { color: var(--halal); font-weight: 600; } .s-doubtful { color: var(--doubt); font-weight: 600; }
+.s-haram { color: var(--haram); font-weight: 600; } .s-unknown { color: var(--unknown); font-weight: 600; }
+[data-chain-info] { width: 100%; margin-top: 12px; }
+
 /* History */
 .row { display: flex; justify-content: space-between; align-items: center; }
 .row h2 { font-size: 1rem; margin: 0; }

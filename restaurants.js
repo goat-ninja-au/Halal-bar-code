@@ -162,5 +162,75 @@
     ) || null;
   }
 
-  root.Restaurants = { CHAINS, STATUS, CHECKED, find };
+
+  // ---------- Store-level rules ----------
+  // Each rule gets (suburb, stateCode) for a specific store and returns
+  // { status, title, note } — or null to fall back to the chain's general status.
+  const STATE_CODES = {
+    "new south wales": "NSW", "victoria": "VIC", "queensland": "QLD", "western australia": "WA",
+    "south australia": "SA", "tasmania": "TAS", "australian capital territory": "ACT", "northern territory": "NT",
+  };
+  const sub = (s) => norm(s).replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+  const inList = (list, suburb) => {
+    const x = sub(suburb);
+    return !!x && list.some((l) => { const y = sub(l); return y === x || y.endsWith(" " + x) || x.endsWith(" " + y); });
+  };
+  const listFor = (stores, state) => (state && stores[state]) || Object.values(stores).flat();
+
+  // Hungry Jack's stores listed as halal on Zabihah (community listings, not confirmed by HJ)
+  const HJ_REPORTED = {
+    NSW: ["Bankstown", "Wiley Park", "Granville", "Auburn", "Casula", "Greenacre", "St Peters"],
+    VIC: ["Deer Park", "Coolaroo", "Craigieburn", "Narre Warren", "Hallam", "Roxburgh Park", "Jacana", "Truganina", "Campbellfield", "Dandenong"],
+  };
+  const KFC_NO_BACON = { NSW: ["Punchbowl", "Bankstown South"] };
+
+  const STORE_RULES = {
+    mcdonalds: (suburb, state) => inList(listFor(CHAINS.find((c) => c.id === "mcdonalds").stores, state), suburb)
+      ? { status: "halal", title: "Halal McDonald's", note: "This suburb has a McDonald's on the official halal list. Only items on the store's certificate are halal — and if the suburb has more than one McDonald's, check you're at the right one." }
+      : { status: "no", title: "Not a halal McDonald's", note: "This store isn't on McDonald's official list of halal restaurants." },
+    grilld: (suburb, state) => inList(["Blacktown"], suburb) && (!state || state === "NSW")
+      ? { status: "halal", title: "Halal certified Grill'd", note: "Blacktown is Grill'd's halal-certified restaurant: halal suppliers, no bacon, no alcohol." }
+      : { status: "no", title: "Not halal certified", note: "Only Grill'd Blacktown (NSW) is halal certified." },
+    hungryjacks: (suburb, state) => inList(listFor(HJ_REPORTED, state), suburb)
+      ? { status: "some", title: "Reported halal — unconfirmed", note: "This store is listed as halal by the community (Zabihah), but Hungry Jack's hasn't confirmed it. Ask to see the halal certificate." }
+      : { status: "no", title: "No halal certification found", note: "We found no halal report for this Hungry Jack's. Most stores sell bacon." },
+    kfc: (suburb, state) => inList(listFor(KFC_NO_BACON, state), suburb)
+      ? { status: "chicken", title: "Halal chicken, no bacon reported", note: "This KFC was reported (2020) as not selling bacon. The store still isn't confirmed as halal certified — ask to see a certificate." }
+      : null,
+    nandos: (suburb, state) => state === "QLD"
+      ? { status: "no", title: "Chicken not halal certified in QLD", note: "Nando's says its Queensland chicken supplier is NOT halal certified, and ribs aren't either." }
+      : state
+        ? { status: "notcert", title: "Not halal certified", note: "Outside QLD Nando's chicken comes from halal-certified suppliers, but the store isn't certified, grills are shared with bacon, and ribs in WA, SA, ACT and NSW aren't certified." }
+        : null,
+  };
+
+  function storeStatus(chain, suburb, stateName) {
+    const state = STATE_CODES[norm(stateName)] || (stateName && stateName.length <= 3 ? stateName.toUpperCase() : null);
+    const rule = STORE_RULES[chain.id];
+    const r = rule && rule(suburb, state);
+    if (r) return r;
+    return { status: chain.status, title: STATUS[chain.status].label, note: chain.summary };
+  }
+
+  // Split "kfc punchbowl", "maccas in lakemba", "punchbowl kfc" into { chain, place }
+  function parse(query) {
+    const words = norm(query).replace(/[,]/g, " ").split(" ").filter(Boolean);
+    const strip = (w) => w.filter((x) => !["in", "at", "near", "the", "store", "halal", "is", "?"].includes(x)).join(" ");
+    for (let n = Math.min(4, words.length); n >= 1; n--) {
+      const head = words.slice(0, n).join(" "), tail = words.slice(-n).join(" ");
+      let c = CHAINS.find((c) => c.aliases.some((a) => flat(a) === flat(head)));
+      if (c) return { chain: c, place: strip(words.slice(n)) };
+      c = CHAINS.find((c) => c.aliases.some((a) => flat(a) === flat(tail)));
+      if (c) return { chain: c, place: strip(words.slice(0, -n)) };
+    }
+    const c = find(query);
+    return c ? { chain: c, place: "" } : null;
+  }
+
+  // Name used to find the chain's stores on the map
+  const OSM_NAME = { mcdonalds: "McDonald's", hungryjacks: "Hungry Jack's", gyg: "Guzman y Gomez", eljannah: "El Jannah",
+    redrooster: "Red Rooster", nandos: "Nando's", grilld: "Grill'd", dominos: "Domino's", pizzahut: "Pizza Hut" };
+  const osmName = (c) => OSM_NAME[c.id] || c.name;
+
+  root.Restaurants = { CHAINS, STATUS, CHECKED, find, parse, storeStatus, osmName };
 })(typeof window !== "undefined" ? window : globalThis);
