@@ -97,15 +97,41 @@
     return v;
   }
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Open Food Facts sometimes answers with an HTML "too busy" page instead of JSON — retry those.
+  async function fetchJSON(url, tries = 3) {
+    for (let i = 0; i < tries; i++) {
+      try {
+        const res = await fetch(url);
+        if (res.status === 404) return { status: 0 };
+        if (res.ok) return await res.json();
+      } catch {}
+      if (i < tries - 1) await sleep(1200 * (i + 1));
+    }
+    throw new Error("database busy");
+  }
+
   async function fetchProduct(code) {
     for (const c of codeVariants(code)) {
-      const res = await fetch(
+      const data = await fetchJSON(
         `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(c)}.json?fields=${FIELDS}`
       );
-      const data = await res.json();
       if (data.status === 1 && data.product) return { code: c, ...data.product };
     }
     return null;
+  }
+
+  // ---------- Labels you've photographed or typed (saved on this device) ----------
+  const LABELS_KEY = "halal-labels";
+  const loadLabels = () => {
+    try { return JSON.parse(localStorage.getItem(LABELS_KEY)) || {}; } catch { return {}; }
+  };
+  function saveLabel(code, name, text) {
+    if (!code) return;
+    const all = loadLabels();
+    all[code] = { name, text };
+    try { localStorage.setItem(LABELS_KEY, JSON.stringify(all)); } catch {}
   }
 
   async function lookup(code) {
@@ -116,13 +142,34 @@
     resultEl.innerHTML = `<p class="muted">Looking up <b>${esc(code)}</b>…</p>`;
     try {
       const product = await fetchProduct(code);
+      const saved = loadLabels()[code];
+      const hasIngredients = product && (product.ingredients_text || product.ingredients_text_en ||
+        (product.ingredients_tags || []).length);
+      if (saved && !hasIngredients) {
+        current = product || { code, product_name: saved.name };
+        return checkText(saved.text, true);
+      }
       if (!product) return renderNotFound(code);
       current = product;
       const result = HalalCheck.check(product);
       render(product, result);
       saveHistory(product, result);
     } catch {
-      resultEl.innerHTML = `<p>Couldn't reach the product database. Check your connection and try again.</p>`;
+      const saved = loadLabels()[code];
+      if (saved) {
+        current = { code, product_name: saved.name };
+        return checkText(saved.text, true);
+      }
+      current = { code, product_name: `Barcode ${code}` };
+      resultEl.className = "card result v-unknown";
+      resultEl.innerHTML = `
+        <div class="verdict">
+          <span class="icon">⏳</span>
+          <div><strong>Database is busy</strong>
+          <p>Open Food Facts didn't answer. Try again in a moment — or check from a photo of the ingredients now.</p></div>
+        </div>
+        <button class="btn" type="button" data-retry="${esc(code)}">↻ Try again</button>
+        ${toolsHTML()}`;
     } finally {
       busy = false;
     }
@@ -194,7 +241,7 @@
     }
   }
 
-  function checkText(text) {
+  function checkText(text, fromSaved = false) {
     if (!text.trim()) return;
     const base = current || { code: "", product_name: "Ingredients you checked" };
     const product = {
@@ -206,7 +253,12 @@
       labels: base.labels,
       ingredients_text: text,
     };
-    render(product, HalalCheck.check(product), { manualText: text });
+    const result = HalalCheck.check(product);
+    render(product, result, { manualText: text, fromSaved });
+    if (product.code) {
+      saveLabel(product.code, product.product_name, text);
+      saveHistory(product, result);
+    }
   }
 
   resultEl.addEventListener("change", (e) => {
@@ -228,6 +280,8 @@
       box.hidden = false;
       box.querySelector("textarea").focus();
     }
+    const retry = e.target.closest("[data-retry]");
+    if (retry) lookup(retry.dataset.retry);
     if (e.target.closest("[data-check]")) {
       checkText(resultEl.querySelector("textarea").value);
     }
@@ -274,7 +328,9 @@
         <span class="icon">${ICONS[r.verdict]}</span>
         <div><strong>${esc(r.title)}</strong><p>${esc(summary)}</p></div>
       </div>
-      ${opts.manualText ? `<p class="small muted from-photo">Checked from the ingredients you gave — double-check any words the photo misread.</p>` : ""}
+      ${opts.fromSaved
+        ? `<p class="small muted from-photo">Using the ingredients label you saved for this barcode.</p>`
+        : opts.manualText ? `<p class="small muted from-photo">Checked from the ingredients you gave — double-check any words the photo misread.</p>` : ""}
       ${r.haram.length ? `<h3>Haram</h3><ul class="flags">${list(r.haram, "haram")}</ul>` : ""}
       ${r.doubtful.length ? `<h3>Doubtful</h3><ul class="flags">${list(r.doubtful, "doubtful")}</ul>` : ""}
       ${r.note.length ? `<h3>Good to know</h3><ul class="flags">${list(r.note, "note")}</ul>` : ""}
