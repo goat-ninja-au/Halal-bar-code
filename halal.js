@@ -16,9 +16,9 @@
     { level: "haram", re: /\b(bacon|ham|prosciutto|pancetta|chorizo)\b/g, why: "Pork product" },
     { level: "haram", re: /\b(wine|beer|rum|brandy|whisky|whiskey|vodka|liqueur|cognac|sherry|sake|mirin|champagne|bourbon|cider)\b(?!\s*vinegar)/g, why: "Alcoholic drink" },
     { level: "haram", re: /(?<!sugar\s)\b(alcohol|ethanol)\b/g, why: "Alcohol" },
-    { level: "haram", re: /\b(carmine|cochineal|carminic acid)\b/g, why: "Carmine – red colour made from insects" },
 
-    // Doubtful – source unknown
+    // Doubtful – source unknown, or scholars differ
+    { level: "doubtful", re: /\b(carmine|cochineal|carminic acid)\b/g, why: "Carmine – red colour made from insects. Hanafi scholars say haram; many others allow it" },
     { level: "doubtful", animal: true, re: /\b(gelatine?|gelatina)\b/g, why: "Gelatine – often from pork unless stated halal/beef/fish" },
     { level: "doubtful", animal: true, re: /\b(rennet|animal enzymes?)\b/g, why: "Rennet – may come from non-halal animals" },
     { level: "doubtful", animal: true, re: /\bwhey\b/g, why: "Whey – made with rennet, source unknown" },
@@ -36,14 +36,14 @@
 
   // ---- E-number rules -----------------------------------------------------
   const ADDITIVE_RULES = {
-    e120: { level: "haram", why: "E120 Carmine – red colour made from insects" },
+    e120: { level: "doubtful", why: "E120 Carmine – red colour made from insects. Hanafi scholars say haram; many others allow it" },
   };
   const DOUBTFUL_ADDITIVES = {
     e441: "Gelatine", e422: "Glycerol", e470a: "Fatty acid salts", e470b: "Fatty acid salts",
     e471: "Mono- & diglycerides", e472a: "Fatty acid esters", e472b: "Fatty acid esters",
     e472c: "Fatty acid esters", e472d: "Fatty acid esters", e472e: "Fatty acid esters",
     e472f: "Fatty acid esters", e473: "Sucrose esters", e474: "Sucroglycerides",
-    e475: "Polyglycerol esters", e476: "PGPR", e477: "Propylene glycol esters",
+    e475: "Polyglycerol esters", e477: "Propylene glycol esters",
     e481: "Sodium stearoyl lactylate", e482: "Calcium stearoyl lactylate",
     e491: "Sorbitan monostearate", e492: "Sorbitan tristearate", e493: "Sorbitan monolaurate",
     e494: "Sorbitan monooleate", e495: "Sorbitan monopalmitate", e542: "Bone phosphate",
