@@ -1,4 +1,4 @@
-// app.js — scanning, Open Food Facts lookup, rendering.
+// app.js — scanning, Open Food Facts lookup, label photo reading, rendering.
 (() => {
   const $ = (id) => document.getElementById(id);
   const scanBtn = $("scanBtn"), reader = $("reader"), scanMsg = $("scanMsg");
@@ -11,10 +11,14 @@
   ].join(",");
 
   const ICONS = { halal: "✅", clear: "🟢", doubtful: "⚠️", haram: "❌", unknown: "❔" };
+  const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
 
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // The product currently on screen (from the database, or a placeholder for a manual check)
+  let current = null;
 
   // ---------- Scanner ----------
   let scanner = null, scanning = false, busy = false;
@@ -40,7 +44,7 @@
         () => {}
       );
       scanning = true;
-    } catch (err) {
+    } catch {
       reader.hidden = true;
       scanBtn.textContent = "📷 Scan barcode";
       scanMsg.textContent = "Couldn't open the camera. Allow camera access, or type the barcode below.";
@@ -72,7 +76,38 @@
     else scanMsg.textContent = "Enter a valid barcode number.";
   });
 
+  $("ingredientsBtn").addEventListener("click", async () => {
+    await stopScan();
+    current = { code: "", product_name: "Ingredients you checked", manual: true };
+    resultEl.hidden = false;
+    resultEl.className = "card result";
+    resultEl.innerHTML = `
+      <h2 class="tools-title">Check from the ingredients</h2>
+      <p class="muted small">Take a clear photo of just the ingredients list, or type it in.</p>
+      ${toolsHTML("", true)}`;
+    resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
   // ---------- Lookup ----------
+  // Barcodes can be stored with or without a leading 0 (UPC-A vs EAN-13), so try both.
+  function codeVariants(code) {
+    const v = [code];
+    if (code.length === 12) v.push("0" + code);
+    if (code.length === 13 && code.startsWith("0")) v.push(code.slice(1));
+    return v;
+  }
+
+  async function fetchProduct(code) {
+    for (const c of codeVariants(code)) {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(c)}.json?fields=${FIELDS}`
+      );
+      const data = await res.json();
+      if (data.status === 1 && data.product) return { code: c, ...data.product };
+    }
+    return null;
+  }
+
   async function lookup(code) {
     busy = true;
     scanMsg.textContent = "";
@@ -80,12 +115,9 @@
     resultEl.className = "card result";
     resultEl.innerHTML = `<p class="muted">Looking up <b>${esc(code)}</b>…</p>`;
     try {
-      const res = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`
-      );
-      const data = await res.json();
-      if (data.status !== 1 || !data.product) return renderNotFound(code);
-      const product = { code, ...data.product };
+      const product = await fetchProduct(code);
+      if (!product) return renderNotFound(code);
+      current = product;
       const result = HalalCheck.check(product);
       render(product, result);
       saveHistory(product, result);
@@ -95,6 +127,111 @@
       busy = false;
     }
   }
+
+  // ---------- Photo / typed ingredients ----------
+  function toolsHTML(prefill = "", open = false) {
+    return `
+      <div class="tools">
+        <label class="btn tool">📸 Photo of ingredients
+          <input type="file" accept="image/*" capture="environment" data-ocr hidden>
+        </label>
+        <button class="btn tool" type="button" data-type>✏️ Type them in</button>
+      </div>
+      <div class="ocr" ${open || prefill ? "" : "hidden"}>
+        <p class="muted small" data-status></p>
+        <textarea rows="6" placeholder="Paste or type the ingredients list…">${esc(prefill)}</textarea>
+        <button class="btn primary" type="button" data-check>Check these ingredients</button>
+      </div>`;
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  // Shrink big phone photos so text reading is quicker, and convert to greyscale.
+  async function prepareImage(file) {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1, 1800 / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.filter = "grayscale(1) contrast(1.3)";
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  async function readLabel(file, statusEl, textarea, ocrBox) {
+    ocrBox.hidden = false;
+    try {
+      if (!window.Tesseract) {
+        statusEl.textContent = "Loading the text reader (first time only)…";
+        await loadScript(TESSERACT_URL);
+      }
+      const image = await prepareImage(file);
+      statusEl.textContent = "Reading the label…";
+      const { data } = await Tesseract.recognize(image, "eng", {
+        logger: (m) => {
+          if (m.status === "recognizing text")
+            statusEl.textContent = `Reading the label… ${Math.round(m.progress * 100)}%`;
+        },
+      });
+      const text = data.text.replace(/\s*\n\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+      if (text.length < 10) {
+        statusEl.textContent = "Couldn't read much text. Try a closer, sharper photo in good light — or type it in.";
+        return;
+      }
+      textarea.value = text;
+      checkText(text);
+    } catch {
+      statusEl.textContent = "Couldn't read the photo. Try again, or type the ingredients in.";
+    }
+  }
+
+  function checkText(text) {
+    if (!text.trim()) return;
+    const base = current || { code: "", product_name: "Ingredients you checked" };
+    const product = {
+      code: base.code,
+      product_name: base.product_name_en || base.product_name || "Ingredients you checked",
+      brands: base.brands,
+      image_front_small_url: base.image_front_small_url,
+      labels_tags: base.labels_tags,
+      labels: base.labels,
+      ingredients_text: text,
+    };
+    render(product, HalalCheck.check(product), { manualText: text });
+  }
+
+  resultEl.addEventListener("change", (e) => {
+    const input = e.target.closest("input[data-ocr]");
+    if (!input || !input.files[0]) return;
+    const card = input.closest(".card");
+    readLabel(
+      input.files[0],
+      card.querySelector("[data-status]"),
+      card.querySelector("textarea"),
+      card.querySelector(".ocr")
+    );
+    input.value = "";
+  });
+
+  resultEl.addEventListener("click", (e) => {
+    if (e.target.closest("[data-type]")) {
+      const box = resultEl.querySelector(".ocr");
+      box.hidden = false;
+      box.querySelector("textarea").focus();
+    }
+    if (e.target.closest("[data-check]")) {
+      checkText(resultEl.querySelector("textarea").value);
+    }
+  });
 
   // ---------- Rendering ----------
   function list(items, cls) {
@@ -111,13 +248,18 @@
     return html;
   }
 
-  function render(p, r) {
+  function render(p, r, opts = {}) {
     const name = p.product_name_en || p.product_name || "Unnamed product";
     const flagged = [
       ...r.haram.map((i) => ({ ...i, cls: "haram" })),
       ...r.doubtful.map((i) => ({ ...i, cls: "doubtful" })),
       ...r.note.map((i) => ({ ...i, cls: "note" })),
     ];
+    const needsLabel = r.verdict === "unknown";
+    const meta = [p.brands, p.code].filter(Boolean).map(esc).join(" · ");
+    const summary = needsLabel && !opts.manualText
+      ? "Nobody has added this product's ingredients yet. Take a photo of the ingredients and I'll check them."
+      : r.summary;
 
     resultEl.className = `card result v-${r.verdict}`;
     resultEl.innerHTML = `
@@ -125,35 +267,44 @@
         ${p.image_front_small_url ? `<img src="${esc(p.image_front_small_url)}" alt="">` : ""}
         <div>
           <h2>${esc(name)}</h2>
-          <p class="muted small">${esc(p.brands || "")} · ${esc(p.code)}</p>
+          ${meta ? `<p class="muted small">${meta}</p>` : ""}
         </div>
       </div>
       <div class="verdict">
         <span class="icon">${ICONS[r.verdict]}</span>
-        <div><strong>${esc(r.title)}</strong><p>${esc(r.summary)}</p></div>
+        <div><strong>${esc(r.title)}</strong><p>${esc(summary)}</p></div>
       </div>
+      ${opts.manualText ? `<p class="small muted from-photo">Checked from the ingredients you gave — double-check any words the photo misread.</p>` : ""}
       ${r.haram.length ? `<h3>Haram</h3><ul class="flags">${list(r.haram, "haram")}</ul>` : ""}
       ${r.doubtful.length ? `<h3>Doubtful</h3><ul class="flags">${list(r.doubtful, "doubtful")}</ul>` : ""}
       ${r.note.length ? `<h3>Good to know</h3><ul class="flags">${list(r.note, "note")}</ul>` : ""}
-      ${r.ingredientsText ? `
+      ${needsLabel || opts.manualText
+        ? toolsHTML(opts.manualText || "")
+        : r.ingredientsText ? `
         <details>
           <summary>Full ingredients</summary>
           <p class="ingredients">${highlight(r.ingredientsText, flagged)}</p>
+        </details>
+        <details class="wrong">
+          <summary>Ingredients look wrong? Check from a photo</summary>
+          ${toolsHTML()}
         </details>` : ""}
-      <p class="small"><a href="https://world.openfoodfacts.org/product/${encodeURIComponent(p.code)}" target="_blank" rel="noopener">Wrong or missing info? Fix it on Open Food Facts →</a></p>
+      ${p.code ? `<p class="small"><a href="https://world.openfoodfacts.org/product/${encodeURIComponent(p.code)}" target="_blank" rel="noopener">Add or fix this product on Open Food Facts →</a></p>` : ""}
     `;
     resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderNotFound(code) {
+    current = { code, product_name: `Barcode ${code}` };
     resultEl.className = "card result v-unknown";
     resultEl.innerHTML = `
       <div class="verdict">
         <span class="icon">❔</span>
-        <div><strong>Product not found</strong>
-        <p>Barcode ${esc(code)} isn't in Open Food Facts yet. You can add it with their free app, then scan again.</p></div>
+        <div><strong>Product not in the database</strong>
+        <p>Barcode ${esc(code)} isn't in Open Food Facts yet. Take a photo of the ingredients and I'll check them instead.</p></div>
       </div>
-      <p class="small"><a href="https://world.openfoodfacts.org/contribute" target="_blank" rel="noopener">How to add a product →</a></p>`;
+      ${toolsHTML()}
+      <p class="small"><a href="https://world.openfoodfacts.org/contribute" target="_blank" rel="noopener">Add it to Open Food Facts so it scans next time →</a></p>`;
   }
 
   // ---------- History (kept on this device only) ----------

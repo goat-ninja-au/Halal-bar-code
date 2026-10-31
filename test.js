@@ -10,6 +10,10 @@ const cases = [
   ["Hamburger buns (not ham)", { ingredients_text: "Flour, water, sugar, yeast" }, "clear"],
   ["Pork sausages", { ingredients_text: "Pork (85%), water, rice flour" }, "haram"],
   ["No ingredients", {}, "unknown"],
+  ["AU style emulsifier (no tags)", { ingredients_text: "Flour, sugar, emulsifiers (471, 481), salt" }, "doubtful"],
+  ["AU style colour 120 (no tags)", { ingredients_text: "Sugar, water, colour (120)" }, "haram"],
+  ["Percentages and weights are not E-numbers", { ingredients_text: "Oats (85%), honey (500g pack), salt" }, "clear"],
+  ["OCR text with INS code", { ingredients_text: "INGREDIENTS: SUGAR, GLUCOSE, INS 441, CITRIC ACID" }, "doubtful"],
 ];
 let fail = 0;
 for (const [name, p, want] of cases) {

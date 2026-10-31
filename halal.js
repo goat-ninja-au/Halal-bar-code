@@ -70,7 +70,11 @@
     const additives = new Set(
       (product.additives_tags || []).map((t) => t.split(":").pop().toLowerCase())
     );
-    for (const m of hay.matchAll(/\be\s?(\d{3,4}[a-f]?)\b/g)) additives.add("e" + m[1]);
+    // E-numbers written as "E471", "INS 471", or Australian-style "emulsifier (471, 472e)"
+    for (const m of hay.matchAll(/\b(?:e|ins)\s?-?(\d{3,4}[a-f]?)\b/g)) additives.add("e" + m[1]);
+    for (const grp of hay.matchAll(/\(([^)]*)\)/g)) {
+      for (const m of grp[1].matchAll(/\b(\d{3,4}[a-f]?)\b/g)) additives.add("e" + m[1]);
+    }
 
     const labels = norm((product.labels_tags || []).join(" ") + " " + (product.labels || ""));
     const certified = /halal/.test(labels);

@@ -88,6 +88,19 @@ mark.haram { background: var(--haram-bg); outline: 1px solid var(--haram); }
 mark.doubtful { background: var(--doubt-bg); outline: 1px solid var(--doubt); }
 mark.note { background: transparent; text-decoration: underline dotted; }
 
+/* Photo / typed ingredients */
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.tool { text-align: center; font-size: .95rem; padding: 12px 8px; }
+.ocr { margin-top: 10px; }
+.ocr textarea {
+  width: 100%; font: inherit; font-size: .9rem; padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg); color: var(--text); resize: vertical;
+}
+.tools-title { font-size: 1.1rem; margin: 0 0 4px; }
+.from-photo { margin: 10px 0 0; }
+#ingredientsBtn { display: block; margin: 4px auto 0; color: var(--brand); text-decoration: underline; }
+
 /* History */
 .row { display: flex; justify-content: space-between; align-items: center; }
 .row h2 { font-size: 1rem; margin: 0; }
